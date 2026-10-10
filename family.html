@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Родословная здоровья</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f1ea;color:#232a2e;font:16px/1.5 system-ui,-apple-system,sans-serif}
+main{max-width:1050px;margin:auto;padding:22px}h1{font-size:clamp(30px,6vw,52px);line-height:1.1;margin:10px 0}h2{margin:0 0 14px}
+.lead{color:#5b6469;max-width:720px}.warn{background:#fff4d6;border:1px solid #e5c867;border-radius:14px;padding:14px 16px;margin:18px 0}
+section{background:#fffdf8;border:1px solid #ddd6c7;border-radius:20px;padding:20px;margin:18px 0}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0}label{font-size:14px;color:#5b6469}
+input,select,button{font:inherit;padding:10px 12px;border-radius:10px;border:1px solid #cfc7b6;background:#fff;color:#232a2e}
+button{cursor:pointer;background:#e9e3d6}button.main{background:#2d6a68;color:#fff;border:0}button.danger{color:#9b2c2c}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #7868b2;outline-offset:2px}
+.gen{margin:16px 0}.gen h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#6b7378;margin:0 0 8px}
+.cards{display:flex;gap:12px;flex-wrap:wrap}.card{flex:1 1 230px;max-width:340px;background:#fff;border:1px solid #d8d0bf;border-radius:16px;padding:12px}
+.card.me{background:#e4f0ee;border-color:#9cc4bf}.rel{color:#6b7378;font-size:14px;margin-left:6px}
+.chip{display:inline-flex;gap:4px;align-items:center;background:#f1e3dc;border-radius:999px;padding:3px 4px 3px 10px;margin:3px 3px 0 0;font-size:14px}
+.chip button{padding:0 7px;border-radius:999px;border:0;background:#e2c9bd}.small{font-size:14px}.small input,.small select{padding:6px 8px;font-size:14px;max-width:100%}
+.res{border-left:6px solid #aaa;border-radius:14px;background:#fff;padding:14px 16px;margin:12px 0}
+.res.high{border-color:#c0392b}.res.mid{border-color:#e39a2d}.res.low{border-color:#6ba58c}
+.badge{display:inline-block;border-radius:999px;padding:2px 10px;font-size:13px;font-weight:700;margin-left:8px;background:#eee}
+.high .badge{background:#f6d5d0}.mid .badge{background:#fbe4be}.low .badge{background:#d7ebe1}
+.res ul{margin:8px 0;padding-left:20px}.note{color:#5b6469;font-size:14px}
+</style></head><body><main>
+<h1>Родословная здоровья</h1>
+<p class="lead">Добавьте родственников и их хронические болезни. Приложение покажет, по каким состояниям семейный анамнез говорит о повышенном внимании к здоровью.</p>
+<div class="warn"><strong>Важно.</strong> Это справочный инструмент, а не диагноз и не прогноз. Хронические болезни зависят и от образа жизни, и от среды. Приложение не оценивает вероятность в процентах и не заменяет врача. Оно показывает, о чём стоит поговорить с врачом и когда.</div>
+
+<section><h2>1. О вас</h2><div class="row">
+<div><label for="usex">Пол</label><br><select id="usex"><option value="">Не указывать</option><option value="f">Женский</option><option value="m">Мужской</option></select></div>
+<div><label for="uage">Возраст</label><br><input id="uage" type="number" min="0" max="120" style="width:100px"></div></div></section>
+
+<section><h2>2. Семья</h2>
+<div class="row"><button class="main" id="quick">Добавить родителей и бабушек с дедушками</button></div>
+<div class="row"><div><label for="rel">Родственник</label><br><select id="rel"></select></div>
+<div><label for="nm">Имя (необязательно)</label><br><input id="nm" maxlength="40"></div>
+<div><br><button id="addp">Добавить</button></div></div>
+<div id="tree"></div></section>
+
+<section><h2>3. На что обратить внимание</h2><div id="results"></div></section>
+
+<section><h2>Данные</h2><p class="note">Всё хранится только в этом браузере. Приложение ничего не отправляет на сервер, но страница загружается с сайта, где она опубликована.</p>
+<div class="row"><button id="exp">Скачать копию (JSON)</button><button id="impb">Загрузить копию</button><input id="imp" type="file" accept=".json,application/json" hidden><button class="danger" id="clr">Удалить всё</button></div>
+<div id="msg" class="note" role="status" aria-live="polite"></div></section>
+</main>
+<script>
+'use strict';
+const CONDS=[
+{k:'cad',n:'Ишемическая болезнь сердца, инфаркт',early:s=>s==='m'?55:65,tip:'Спросите терапевта или кардиолога про оценку сердечно-сосудистого риска и липидный профиль. В рекомендациях ACC/AHA сердечно-сосудистая болезнь считается ранней у мужчины-родственника до 55 лет и у женщины до 65.'},
+{k:'scd',n:'Внезапная смерть от сердца',early:()=>50,tip:'Внезапная смерть родственника до 50 лет — отдельный тревожный признак. Расскажите об этом врачу: он может предложить ЭКГ и консультацию кардиолога.'},
+{k:'stroke',n:'Инсульт',early:()=>60,tip:'Регулярно измеряйте давление и проверяйте холестерин и сахар. Обсудите с врачом общий сосудистый риск.'},
+{k:'htn',n:'Гипертония',early:()=>45,tip:'Измеряйте давление дома и на приёмах. Врач подскажет, как часто это делать.'},
+{k:'chol',n:'Высокий холестерин',early:()=>45,tip:'Сдайте липидный профиль и расскажите врачу о семейном анамнезе. Очень высокий холестерин в молодом возрасте у родственников иногда связан с наследственными формами.'},
+{k:'t2d',n:'Сахарный диабет 2 типа',early:()=>45,tip:'Спросите врача про проверку глюкозы или HbA1c. Вес, движение и питание заметно влияют на риск. Диабет у родственников также связан с повышенным риском болезней сердца.'},
+{k:'breast',n:'Рак молочной железы',cancer:true,early:()=>50,tip:'При раке груди у матери, сестры или дочери CDC рекомендует начинать маммографию с 40 лет. Если случаев несколько или они ранние, врач может предложить генетическую консультацию и более раннее обследование.'},
+{k:'ovary',n:'Рак яичников',cancer:true,only:'f',early:()=>99,tip:'Рак яичников у близких родственников — повод спросить врача о генетической консультации, особенно вместе с раком молочной железы в семье.'},
+{k:'crc',n:'Колоректальный рак (кишечник)',cancer:true,hi:60,early:()=>50,tip:'При колоректальном раке у близкого родственника в США советуют начинать скрининг с 40 лет или за 10 лет до возраста диагноза у родственника — по тому, что раньше. Решение принимает врач.'},
+{k:'prostate',n:'Рак предстательной железы',cancer:true,only:'m',early:()=>55,tip:'Спросите уролога, когда начинать обсуждать обследование предстательной железы с учётом семейного анамнеза.'},
+{k:'alz',n:'Болезнь Альцгеймера, деменция',early:()=>65,tip:'Следите за давлением, сахаром, слухом, движением и сном. Если у родственников болезнь началась до 65 лет, обсудите это с неврологом.'},
+{k:'osteo',n:'Остеопороз, перелом шейки бедра',early:()=>70,tip:'Спросите врача про оценку риска переломов и плотность костей. Важны кальций, витамин D, движение и отказ от курения.'}
+];
+const REL={
+mother:{n:'Мать',sex:'f',deg:1,side:'m',g:1},father:{n:'Отец',sex:'m',deg:1,side:'p',g:1},
+sister:{n:'Сестра',sex:'f',deg:1,side:'x',g:2},brother:{n:'Брат',sex:'m',deg:1,side:'x',g:2},
+daughter:{n:'Дочь',sex:'f',deg:1,side:'x',g:3},son:{n:'Сын',sex:'m',deg:1,side:'x',g:3},
+grandma_m:{n:'Бабушка по матери',sex:'f',deg:2,side:'m',g:0},grandpa_m:{n:'Дедушка по матери',sex:'m',deg:2,side:'m',g:0},
+grandma_p:{n:'Бабушка по отцу',sex:'f',deg:2,side:'p',g:0},grandpa_p:{n:'Дедушка по отцу',sex:'m',deg:2,side:'p',g:0},
+aunt_m:{n:'Тётя по матери',sex:'f',deg:2,side:'m',g:1},uncle_m:{n:'Дядя по матери',sex:'m',deg:2,side:'m',g:1},
+aunt_p:{n:'Тётя по отцу',sex:'f',deg:2,side:'p',g:1},uncle_p:{n:'Дядя по отцу',sex:'m',deg:2,side:'p',g:1},
+halfsister:{n:'Сводная сестра',sex:'f',deg:2,side:'x',g:2},halfbrother:{n:'Сводный брат',sex:'m',deg:2,side:'x',g:2}
+};
+const COND=Object.fromEntries(CONDS.map(c=>[c.k,c]));
+const LEVEL={high:'Повышенное внимание',mid:'Умеренное',low:'Небольшое'};
+function who(a){return (a.p.name?a.p.name+' (':'')+a.r.n+(a.p.name?')':'')+(a.onset!=null?', диагноз в '+a.onset:'')+(a.early?' — рано':'')}
+function assess(people,user){
+ const out=[];
+ for(const c of CONDS){
+  if(c.only&&user.sex&&c.only!==user.sex)continue;
+  const aff=[];
+  for(const p of people){const r=REL[p.rel];for(const d of p.conds){if(d.k!==c.k)continue;
+   aff.push({p,r,onset:d.onset,early:d.onset!=null&&d.onset<c.early(r.sex)})}}
+  if(!aff.length)continue;
+  const f=aff.filter(a=>a.r.deg===1),s=aff.filter(a=>a.r.deg===2),ef=f.filter(a=>a.early);
+  const side=x=>f.filter(a=>a.r.side===x||a.r.side==='x').length>=1&&s.filter(a=>a.r.side===x).length>=2;
+  let lvl='low';
+  if(f.length||s.filter(a=>a.r.side==='m').length>=2||s.filter(a=>a.r.side==='p').length>=2)lvl='mid';
+  if(ef.length&&!c.cancer)lvl='mid';
+  if(f.length>=2||side('m')||side('p')||(ef.length&&aff.length>=2)||(c.cancer&&ef.length)||(c.hi&&f.some(a=>a.onset!=null&&a.onset<c.hi)))lvl='high';
+  out.push({c,lvl,aff,f,ef});
+ }
+ const rank={high:0,mid:1,low:2};
+ out.sort((a,b)=>rank[a.lvl]-rank[b.lvl]);
+ const has=k=>out.some(o=>o.c.k===k),flags=[];
+ if(has('breast')&&has('ovary'))flags.push('В семье есть и рак молочной железы, и рак яичников. Такое сочетание — повод спросить врача о генетической консультации.');
+ const mb=out.find(o=>o.c.k==='breast');
+ if(mb&&mb.aff.some(a=>a.r.sex==='m'))flags.push('Рак молочной железы у мужчины в семье бывает редко. Расскажите об этом врачу и спросите о генетической консультации.');
+ if(has('cad')&&has('t2d'))flags.push('Болезни сердца и диабет в одной семье усиливают друг друга как семейные факторы. Обсудите с врачом общий метаболический и сердечно-сосудистый риск.');
+ if(out.some(o=>o.ef.length))flags.push('Есть болезни, начавшиеся раньше обычного. Для врача это важный признак, поэтому сообщите возраст диагноза.');
+ return{out,flags};
+}
+//UI
+const $=id=>document.getElementById(id);
+function el(t,a={},...kids){const e=document.createElement(t);for(const[k,v]of Object.entries(a)){if(k==='class')e.className=v;else if(k.startsWith('on'))e[k]=v;else if(v!==false&&v!=null)e.setAttribute(k,v===true?'':String(v))}kids.flat().forEach(c=>{if(c!=null)e.append(c instanceof Node?c:document.createTextNode(String(c)))});return e}
+const KEY='famrisk.v1';let state={user:{sex:'',age:''},people:[]};
+function clean(raw){
+ const out={user:{sex:'',age:''},people:[]};if(!raw||typeof raw!=='object')return out;
+ const u=raw.user||{};out.user.sex=u.sex==='f'||u.sex==='m'?u.sex:'';const a=Number(u.age);out.user.age=Number.isFinite(a)&&a>=0&&a<=120&&u.age!==''?a:'';
+ if(Array.isArray(raw.people))for(const p of raw.people.slice(0,60)){
+  if(!p||!REL[p.rel])continue;const seen=new Set(),conds=[];
+  if(Array.isArray(p.conds))for(const d of p.conds){if(!d||!COND[d.k]||seen.has(d.k))continue;seen.add(d.k);const o=Number(d.onset);conds.push({k:d.k,onset:d.onset!==null&&d.onset!==''&&Number.isFinite(o)&&o>=0&&o<=120?o:null})}
+  out.people.push({id:String(p.id||Math.random()).slice(0,30),rel:p.rel,name:String(p.name||'').slice(0,40),unknown:!!p.unknown,conds});
+ }
+ return out;
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{msg('Браузер не даёт сохранить данные. Скачайте копию.')}}
+function msg(t){$('msg').textContent=t}
+function commit(){save();render()}
+function addPerson(rel,name){state.people.push({id:Date.now()+'-'+Math.random().toString(16).slice(2),rel,name:name||'',unknown:false,conds:[]})}
+function card(p){
+ const r=REL[p.rel],sel=el('select',{'aria-label':'Болезнь'},CONDS.map(c=>el('option',{value:c.k},c.n))),age=el('input',{type:'number',min:0,max:120,placeholder:'Возраст',style:'width:90px','aria-label':'Возраст при диагнозе'});
+ const add=el('button',{onclick:()=>{if(p.conds.some(d=>d.k===sel.value)){msg('Эта болезнь уже добавлена.');return}const v=age.value===''?null:Number(age.value);if(v!==null&&(!Number.isFinite(v)||v<0||v>120)){msg('Возраст должен быть от 0 до 120.');return}p.conds.push({k:sel.value,onset:v});msg('');commit()}},'Добавить');
+ return el('div',{class:'card'},
+  el('div',{},el('strong',{},p.name||r.n),p.name?el('span',{class:'rel'},r.n):null),
+  el('div',{},p.conds.length?p.conds.map(d=>el('span',{class:'chip'},COND[d.k].n+(d.onset!=null?', '+d.onset+' л.':''),el('button',{'aria-label':'Убрать '+COND[d.k].n,onclick:()=>{p.conds=p.conds.filter(z=>z!==d);commit()}},'×'))):el('span',{class:'note'},p.unknown?'О здоровье неизвестно':'Хронических болезней нет')),
+  el('div',{class:'small row'},sel,age,add),
+  el('label',{class:'small'},el('input',{type:'checkbox',checked:p.unknown,onchange:e=>{p.unknown=e.target.checked;commit()}}),' Ничего не известно о здоровье'),
+  el('div',{class:'row'},el('button',{class:'danger small',onclick:()=>{state.people=state.people.filter(z=>z!==p);commit()}},'Удалить')));
+}
+function renderTree(){
+ const t=$('tree');t.replaceChildren();
+ const names=['Бабушки и дедушки','Родители, тёти и дяди','Вы и братья/сёстры','Дети'];
+ names.forEach((n,g)=>{
+  const people=state.people.filter(p=>REL[p.rel].g===g);
+  const cards=people.map(card);
+  if(g===2)cards.unshift(el('div',{class:'card me'},el('strong',{},'Вы'),el('div',{class:'note'},'Ваши данные указаны выше')));
+  if(!cards.length)return;
+  t.append(el('div',{class:'gen'},el('h3',{},n),el('div',{class:'cards'},cards)));
+ });
+}
+function renderResults(){
+ const box=$('results');box.replaceChildren();
+ if(!state.people.length){box.append(el('p',{class:'note'},'Добавьте хотя бы одного родственника.'));return}
+ const{out,flags}=assess(state.people,state.user);
+ if(!out.length)box.append(el('p',{},'По введённым данным хронических болезней у родственников нет. Это не гарантия: возможно, вы знаете не всё, а некоторые родственники могли умереть молодыми.'));
+ for(const o of out){
+  const items=[el('li',{},'Родственники первой линии: '+(o.f.length?o.f.map(who).join('; '):'нет')),el('li',{},'Родственники второй линии: '+(o.aff.length-o.f.length?o.aff.filter(a=>a.r.deg===2).map(who).join('; '):'нет'))];
+  let tip=o.c.tip;
+  if(o.c.k==='crc'&&o.f.length){const ages=o.f.map(a=>a.onset).filter(v=>v!=null);const start=ages.length?Math.min(40,Math.min(...ages)-10):40;tip+=' Ориентир по вашим данным: начало обсуждения скрининга около '+Math.max(start,18)+' лет.'}
+  box.append(el('div',{class:'res '+o.lvl},el('strong',{},o.c.n),el('span',{class:'badge'},LEVEL[o.lvl]),el('ul',{},items),el('div',{},tip)));
+ }
+ flags.forEach(f=>box.append(el('div',{class:'warn'},f)));
+ const unk=state.people.filter(p=>p.unknown).length;
+ box.append(el('p',{class:'note'},'Уровни — упрощённая оценка по числу и близости родственников, возрасту диагноза и общей схеме CDC. Если о части родственников ничего неизвестно'+(unk?' (таких сейчас '+unk+')':'')+', реальный риск может быть выше или ниже.'));
+}
+function render(){renderTree();renderResults()}
+function init(){
+ const rel=$('rel');Object.entries(REL).forEach(([k,r])=>rel.append(el('option',{value:k},r.n)));
+ try{state=clean(JSON.parse(localStorage.getItem(KEY)))}catch{state=clean(null)}
+ $('usex').value=state.user.sex;$('uage').value=state.user.age;
+ $('usex').onchange=e=>{state.user.sex=e.target.value;commit()};
+ $('uage').onchange=e=>{const v=e.target.value===''?'':Number(e.target.value);state.user.age=Number.isFinite(v)&&v>=0&&v<=120?v:'';e.target.value=state.user.age;commit()};
+ $('addp').onclick=()=>{if(state.people.length>=60){msg('Достаточно 60 родственников.');return}addPerson($('rel').value,$('nm').value.trim());$('nm').value='';msg('');commit()};
+ $('quick').onclick=()=>{['mother','father','grandma_m','grandpa_m','grandma_p','grandpa_p'].forEach(k=>{if(!state.people.some(p=>p.rel===k))addPerson(k,'')});commit()};
+ $('exp').onclick=()=>{const u=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'})),a=el('a',{href:u,download:'family-health.json'});document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1500)};
+ $('impb').onclick=()=>$('imp').click();
+ $('imp').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{state=clean(JSON.parse(rd.result));$('usex').value=state.user.sex;$('uage').value=state.user.age;msg('Копия загружена.');commit()}catch{msg('Не удалось прочитать файл.')}};rd.readAsText(f);e.target.value=''};
+ $('clr').onclick=()=>{if(confirm('Удалить все данные в этом браузере?')){state=clean(null);$('usex').value='';$('uage').value='';msg('Данные удалены.');commit()}};
+ render();
+}
+if(typeof document!=='undefined')init();
+</script></body></html>
